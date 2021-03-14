@@ -39,7 +39,7 @@ The information covering the PS-NCentral is useful for those with starting some 
 
 At time of writing version 1.2 is in beta release, and we'll cover some of the nuances of that version. The main advantage of version 1.2 is making it PowerShell 7 for cross compatability to be able to run Windows/Linux or in an Azure function.
 
-PS-NCentral provides cmdlets for 17 Get cmdlets and 3 Set cmdlets that cover the majority, so should cover the majority of automation. This can be downloaded from: [https://github.com/ToschAutomatisering/PS-NCentral](https://github.com/ToschAutomatisering/PS-NCentral)
+PS-NCentral provides cmdlets for 17 Get cmdlets and 4 Set cmdlets (See Appendix B) that cover the majority, so should cover the majority of automation. This can be downloaded from: [https://github.com/ToschAutomatisering/PS-NCentral](https://github.com/ToschAutomatisering/PS-NCentral)
 
 Or installed with the cmdlet
 
@@ -49,7 +49,7 @@ Install-Module PS-NCentral
 
 # Connecting
 
-The first step required before connecting is to create a new automation account with appropriate role permissions. With N-Central 2020 or 12.3 HF4 and later you must disable the MFA requirement for the account so use a long and complex password.
+The first step required before connecting is to create a new automation account with appropriate role permissions. With N-Central 2020 or 12.3 HF4 and later you must **disable the MFA** requirement for the account if you want to use these **credentials directly** for authenticating. So use a long and complex password then.
 
 Once the account is created, select the API Authentication tab and click on the ' **Generate JSON Web Token**' button, save this **JWT** token somewhere secure, if you lose your JWT, you can generate another one at any time, but it will invalidate the previous one. If you update/change role permissions for the account automation account you will need to regenerate the token, as the asserted permissions are in the JWT.
 
@@ -59,43 +59,63 @@ Connecting to your N-Central service with PS-NCentral only needs to be done once
 
 - The fqdn of your N-Central server, ie: `n-central.mydomain.com`
 - The JWT from above
+- Username/Password (no MFA) for versions **before 1.2**.
 
 Then enter the following:
 
-**Version 1.1**
+**All versions**
+
 ```powershell
 #Import the PS-NCentral module
 import-module .\PS-NCentral.psm1 -Verbose
 
-#$credential = Get-Credential
-$password = ConvertTo-SecureString "YOUR JWT TOKEN" -AsPlainText -Force
-$credential = New-Object System.Management.Automation.PSCredential ("ACCOUNT NAME REQUIRED", $password)
+#$credential = Get-Credential		## This line can be used for a dialog. Skip 2 below.
+$password = ConvertTo-SecureString "<Password>" -AsPlainText -Force
+$credential = New-Object System.Management.Automation.PSCredential ("<User>", $password)
 
 #Connect to NC
-New-NCentralConnection -ServerFQDN YOUR SERVER FQDN -PSCredential $credential
+New-NCentralConnection -ServerFQDN "YOUR SERVER FQDN" -PSCredential $credential
 ```
-**Version 1.2**
+
+\* Might generate an error on some complex passwords. Avoid using a ^.
+
+**Version 1.2 and later**
 
 ```powershell
 #Import the PS-NCentral module
 import-module .\PS-NCentral.psm1 -Verbose
 
+#Credentials with JWT
+$password = ConvertTo-SecureString "YOUR JWT TOKEN" -AsPlainText -Force
+$credential = New-Object System.Management.Automation.PSCredential ("_JWT", $password)
+
 #Connect to NC
-New-NCentralConnection -ServerFQDN "YOUR SERVER FQDN" -JWT "YOUR JWT STRING"
+New-NCentralConnection -ServerFQDN "YOUR SERVER FQDN" -PSCredential $credential
+```
+**or**
+
+```powershell
+#Import the PS-NCentral module
+import-module .\PS-NCentral.psm1 -Verbose
+
+#Connect to NC using the JWT directly
+New-NCentralConnection -ServerFQDN "YOUR SERVER FQDN" -JWT "YOUR JWT TOKEN"
 ```
 
 If successful you will get an output similar to the below:
 
 |Property | Value|
 |--------|-----|
-| Error | |
-| ConnectionURL | `n-central.mydomain.com`|
-| BindingURL | `https://n-central.mydomain.com/dms2/services2/ServerEI2?`wsdl |
+| ConnectionURL | `n-central.mydomain.com` |
+| BindingURL        | `https://n-central.mydomain.com/dms2/services2/ServerEI2?wsdl' |
+| AllProtocols      | tls12,tls13                                                  |
 | IsConnected | True |
-| NCVersion | |
-| tCreds | |
+| RequestTimeOut | 100 |
+| NCVersion | 2020.1.5.425 |
 | DefaultCustomerID | 50 |
-| CustomerValidation | {zip/postalcode, street1, street2, city...} |
+| Error |  |
+
+The session is now stored in the global **$\_NCSession** variable, and will automatically be used for other PS-NCentral commands.
 
 ### Multiple PS-NCentral server connections
 
@@ -112,16 +132,18 @@ $NC1Customers = Get-NCCustomerList -NcSession $Connection1
 $NC2Customers = Get-NCCustomerList -NcSession $Connection2
 ```
 
-Another useful pameter when connecting is the **DefaultCustomerID**, this sets the default scope for when calling cmdlets such as Get-NCDeviceList, so if I were to perform the following connection and function call it would only give me all devices associated with CustomerID 333
+Another useful pameter when connecting is the **DefaultCustomerID**, this sets the default scope for when calling cmdlets such as Get-NCDeviceList without a parameter, so if I were to perform the following connection and function call it would only give me all devices associated with CustomerID 333
 
 ``` powershell
 New-NCentralConnection "$NCentralFQDN" -JWT "$JWT1" -DefaultCustomerID 333
 $Customer333Devices = Get-NCDeviceList
 ```
 
+You can use **Set-NCCustomerDefault** to change the value afterwards.
+
 ## PowerShell WebserviceProxy
 
-As a preface to the usage of the New-WebserviceProxy cmdlet, we will focus on the v2 rather than v1 legacy API as the v1 maybe endpoint maybe deprecated at some point.
+As a preface to the usage of the New-WebserviceProxy cmdlet, we will focus on the v2 rather than v1 legacy API as the v1 endpoint maybe deprecated at some point.
 
 The main differences between the v1 and v2 endpoints are:
 
@@ -131,7 +153,7 @@ The main differences between the v1 and v2 endpoints are:
 
 It will be necessary to review the Javadocs provided on your server for the lastest information on the classes and constructors, you can find them under your own N-Central server under `https://n-central.mydomain.com/dms/`
 
-If reviewing other WebserviceProxy powershell code on the internet, you can identify v1/legacy code as it will have the following in the binding URL string: /dms/services/ServerEI?wsdl while v2 has /dms2/services2/ServerEI2?wsdl
+If reviewing other WebserviceProxy powershell code on the internet, you can identify **v1**/legacy code as it will have the following in the binding URL string: **/dms/services/ServerEI?wsdl** while **v2** has **/dms2/services2/ServerEI2?wsdl**
 
 For connecting to webservice you will need the same information as with the PS-NCentral which connects in the same way underneath:
 
@@ -174,7 +196,7 @@ $nws.customerList("", $JWT, $settings)
 
 As you will note when connecting with the `$nws` variable, at no point did you use your username or JWT, as you will observe in the `$nws.customerList` method called above, the  $JWT is used in every get or set, and the username is simply `""` as the username is inside of the JWT string.
 
-Underneath the PS-NCentral module it saves these variables and re-uses each time a cmdlet is used.
+Underneath the PS-NCentral module it saves these variables with each connection and re-uses each time a cmdlet is used.
 
 # Performing Queries
 
@@ -184,13 +206,11 @@ Performing queries with the PS-Central module is quick and easy, and several exa
 ```powershell
 Import-Module PS-NCentral.psm1 -Verbose
 
-$username = "ACCOUNT NAME"
+$ServerFQDN = n-central.myserver.com
 $JWT = "JWT TOKEN"
-$password = ConvertTo-SecureString $JWT -AsPlainText -Force
-$credential = New-Object System.Management.Automation.PSCredential ($username, $password)
 
 #Connect to NC
-New-NCentralConnection -ServerFQDN n-central.myserver.com -PSCredential $credential
+New-NCentralConnection -ServerFQDN $ServerFQDN -JWT $JWT
 
 #Grab the customer list/details
 $CustomerList = Get-NCCustomerList
@@ -217,14 +237,14 @@ foreach ($Customer in $CustomerList) {
 $CustomerReport | Out-GridView
 ```
 
-The important parts of this example are the simple one line calls for the **New-CentralConnection** , **Get-NCCsutomerList** and **Get-NCCustomerPropertyList**. With very little effort we can connect, retrieve the data then process into a single table for review.
+The important parts of this example are the simple one line calls for the **New-CentralConnection** , **Get-NCCustomerList** and **Get-NCCustomerPropertyList**. With very little effort we can connect, retrieve the data then process into a single table for review.
 
 ### Advanced PS-NCentral querying
 The PS-NCentral module provides ease of access to N-Central API calls with normal **verb-noun** functions, but you can also perform a direct call through the internal connection class, we could replace the above function calls with these methods:
 
 ```powershell
 # Connect to NC
-$NCSession = New-NCentralConnection -ServerFQDN n-central.myserver.com -PSCredential $credential
+$NCSession = New-NCentralConnection -ServerFQDN $ServerFQDN -JWT $JWT
 
 # Grab the customer list/details
 $CustomerList = $NCSession.CustomerList()
@@ -233,7 +253,17 @@ $CustomerList = $NCSession.CustomerList()
 $CustomerPropertyList = $NCSession.OrganizationPropertyList()
 ```
 
-We can get the list of all the underlying class connection methods by enumerating the members with `$NCSession | Get-Member  -MemberType Method` to see all 'inside' methods. Most methods have 'Overloads'. These are selected based on the parameter-pattern eg. `([String], [String])` or `([String],[Int])`.
+We can get the list of all the underlying class connection methods by enumerating the members with `$_NCSession | Get-Member -MemberType Method` to see all 'inside' methods, which reflect the API-methods of N-Central ('http://mothership.n-able.com/dms/javadoc_ei2/com/nable/nobj/ei2/ServerEI2_PortType.html') where applicable.
+
+Most methods have 'Overloads'. These are selected based on the parameter-pattern eg. `([String], [String])` or `([String],[Int])`.
+
+```powershell
+#Get the devices for customerid 100
+$Customer100Devices = $NCSession.DeviceList(100)
+
+#Get the probes for customerid 100
+$Customer100Probes = $NCSession.DeviceList(100,$false,$true)
+```
 
 For a list of all methods see [Appendix E - All PS-Central Methods](#appendix-e---all-ps-central-methods)
 
@@ -395,37 +425,53 @@ Get-NCCustomerList | Set-NCCustomerProperty -PropertyLabel 'Reporting – Custom
 
 In the second example we may have a custom table from a CSV or other source that has the following properties and values:
 
-| **customerid** | **CustomerSLA** | 
-| --- | --- | 
-| 123 | 1H | 
-| 124 | 4H | 
-| 221 | 8H | 
-| 233 | 8H | 
-| 321 | 8H | 
+| **customerid** | **CustomerSLA** |
+| --- | --- |
+| 123 | 1H |
+| 124 | 4H |
+| 221 | 8H |
+| 233 | 8H |
+| 321 | 8H |
 
 \
-We then have this table in a variable `$CustomerPropers` and use it to populate a custom property called **'Reporting - Customer SLA'**
+We then have this table in a variable `$CustomerProps` and use it to populate a custom property called **'Reporting - Customer SLA'**
 ```powershell
 Get-NCCustomerList |
 Select-Object customerid, @{n="CustomerSLA"; e={$CustomerID = $_.customerid; (@($CustomerProps).where({ $_.customerID -eq $CustomerID })).CustomerSLA}} `
 | Where-Object {$_.CustomerSLA} `
-| % { Set-NCCustomerProperty -CustomerIDs $_.CustomerID -PropertyLabel 'Reporting – Customer SLA' -PropertyValue $_.CustomerSLA }
+| % { Set-NCCustomerProperty -CustomerIDs $_.CustomerID -PropertyLabel 'Reporting – Customer SLA' -PropertyValue ($_.CustomerSLA -join ',') }
 ```
+When multiple records for a customerid are found in $Customerprops all values will be added comma-separated.
+
+The important parts of this example are the table-lookup 
+
+```
+(@(<TableObject>).where(<LookupColumn> -eq <LookupValue>)).<ResultsColumn>
+```
+
+and the filter to only return objects which had values added
+
+```
+Where-Object {$_.<AddedCustomField>}
+```
+
+before setting the properties.
+
 ### Updating Custom Device Properties
 Another example would be where we may want to populate a Custom Device Property, in this case **'External ID'** based upon the CustomerID using in a customer table `$Customers`
-| **customerid** | **ExternalID** | 
-| --- | --- | 
-| 123 | 78409377 | 
-| 124 | 78405890 | 
-| 221 | 78404905 | 
-| 233 | 78402984 | 
-| 321 | 38940384 | 
+| **customerid** | **ExternalID** |
+| --- | --- |
+| 123 | 78409377 |
+| 124 | 78405890 |
+| 221 | 78404905 |
+| 233 | 78402984 |
+| 321 | 38940384 |
 
 ```powershell
 Get-NCDeviceList | `
 Select-Object DeviceID, `
-@{n="ExternalID"; e={$CustomerID = $_.customerid; (@($Customers).where({ $_.customerID -eq $CustomerID })).AzureAD}} | `
-Where-Object {$_.ExternalID} | %{Set-NCDeviceProperty -DeviceIDs $_.DeviceID -PropertyLabel 'ExternalID' -PropertyValue $_.ExternalID}
+@{n="ExternalID"; e={$CustomerID = $_.customerid; (@($Customers).where({ $_.customerID -eq $CustomerID })).ExternalID}} | `
+Where-Object {$_.ExternalID} | %{Set-NCDeviceProperty -DeviceIDs $_.DeviceID -PropertyLabel 'ExternalID' -PropertyValue ($_.ExternalID -join ',')}
 ```
 
 ## PowerShell WebserviceProxy
@@ -581,7 +627,7 @@ At time of writing with PS-NCentral version 1.2 it is possible to use the Custom
 
 ```powershell
 #Connect to NC
-$NCSession = New-NCentralConnection -ServerFQDN nc.premiertech.com.au -JWT $JWT
+$NCSession = New-NCentralConnection -ServerFQDN n-central.myserver.com -JWT $JWT
 $ParentId = 50
 $NewCustomerAttributes = @{
     firstname = "john"
@@ -829,7 +875,7 @@ This function will return the value for the new Customer ID, you can then use th
 | Set-NCCustomerProperty | Fills the specified property(name) for the given CustomerID(s). |
 | Set-NCDeviceProperty | Fills the Custom Property for the DeviceID(s). |
 | Set-NCTimeOut | Sets the max. time in seconds to wait for data returning from a (Synchronous) NCentral API-request. |
-<br>
+
 # Appendix C – GetAllCustomerProperties.ps1
 
 ```powershell
