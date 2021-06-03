@@ -2,7 +2,6 @@
 
 ## Table of Contents
 - [How To: N-Central API Automation](#how-to--n-central-api-automation)
-  * [Table of Contents](#table-of-contents)
 - [Overview](#overview)
 - [Connecting](#connecting)
   * [PS-NCentral](#ps-ncentral)
@@ -27,7 +26,11 @@
 - [Appendix C – GetAllCustomerProperties.ps1](#appendix-c---getallcustomerpropertiesps1)
 - [Appendix D – Customer Property variables](#appendix-d---customer-property-variables)
 - [Appendix E - All PS-Central Methods](#appendix-e---all-ps-central-methods)
+- [Appendix F - Common Error Codes](#appendix-f---common-error-codes)
 - [Credits](#credits)
+
+<small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents generated with markdown-toc</a></i></small>
+
 
 # Overview
 
@@ -35,13 +38,11 @@ N-Central's API is a flexible, programmatic, object oriented, Java based interfa
 
 For the purposes of this guide we'll be covering connectivity and basic usage with PowerShell based automation through the PS-NCentral module, as well as native WebserviceProxy cmdlet.
 
-The information covering the PS-NCentral is useful for those with starting some experience with PowerShell or need to quickly put together code where module dependency isn't an issue, while the usage of the WebserviceProxy method is for those more familiar with object oriented coding or need code portatability.
-
-At time of writing version 1.2 is in beta release, and we'll cover some of the nuances of that version. The main advantage of version 1.2 is making it PowerShell 7 for cross compatability to be able to run Windows/Linux or in an Azure function.
+The information covering the PS-NCentral is useful for those with starting some experience with PowerShell or need to quickly put together code where module dependency isn't an issue, while the usage of the WebserviceProxy method is for those more familiar with object oriented coding or need code portatability. As of version 1.2 PS-NCentral uses PowerShell 7 for cross compatability to be able to run Windows/Linux or in an Azure function.
 
 PS-NCentral provides cmdlets for 17 Get cmdlets and 4 Set cmdlets (See Appendix B) that cover the majority, so should cover the majority of automation. This can be downloaded from: [https://github.com/ToschAutomatisering/PS-NCentral](https://github.com/ToschAutomatisering/PS-NCentral)
 
-Or installed with the cmdlet
+Or installed from PS-Gallery with the cmdlet
 
 ```powershell
 Install-Module PS-NCentral
@@ -49,13 +50,15 @@ Install-Module PS-NCentral
 
 # Connecting
 
-The first step required before connecting is to create a new automation account with appropriate role permissions. With N-Central 2020 or 12.3 HF4 and later you must **disable the MFA** requirement for the account if you want to use these **credentials directly** for authenticating. So use a long and complex password then.
+The first step required before connecting is to create a new automation account with appropriate role permissions. With N-Central 2020 or 12.3 HF4 and later you must **disable the MFA** requirement for the account, so use a long and complex password. The (preferred) API-Only account in N-Central 2021 needs to be set to \'mfa not needed\'.
 
 Once the account is created, select the API Authentication tab and click on the ' **Generate JSON Web Token**' button, save this **JWT** token somewhere secure, if you lose your JWT, you can generate another one at any time, but it will invalidate the previous one. If you update/change role permissions for the account automation account you will need to regenerate the token, as the asserted permissions are in the JWT.
 
+Note: Activating the MFA-setting after generating the token still blocks JWT-access, as well as an expired password for the originating account (90 days default).
+
 ## PS-NCentral
 
-Connecting to your N-Central service with PS-NCentral only needs to be done once per session. Your first require the following information:
+Connecting to your N-Central service with PS-NCentral only needs to be done once per session. You first require the following information:
 
 - The fqdn of your N-Central server, ie: `n-central.mydomain.com`
 - The JWT from above
@@ -85,6 +88,16 @@ New-NCentralConnection -ServerFQDN "YOUR SERVER FQDN" -PSCredential $credential
 #Import the PS-NCentral module
 import-module .\PS-NCentral.psm1 -Verbose
 
+#Connect to NC using the JWT directly
+New-NCentralConnection -ServerFQDN "YOUR SERVER FQDN" -JWT "YOUR JWT TOKEN"
+```
+
+which is equivalent to:
+
+```powershell
+#Import the PS-NCentral module
+import-module .\PS-NCentral.psm1 -Verbose
+
 #Credentials with JWT
 $password = ConvertTo-SecureString "YOUR JWT TOKEN" -AsPlainText -Force
 $credential = New-Object System.Management.Automation.PSCredential ("_JWT", $password)
@@ -92,16 +105,6 @@ $credential = New-Object System.Management.Automation.PSCredential ("_JWT", $pas
 #Connect to NC
 New-NCentralConnection -ServerFQDN "YOUR SERVER FQDN" -PSCredential $credential
 ```
-**or**
-
-```powershell
-#Import the PS-NCentral module
-import-module .\PS-NCentral.psm1 -Verbose
-
-#Connect to NC using the JWT directly
-New-NCentralConnection -ServerFQDN "YOUR SERVER FQDN" -JWT "YOUR JWT TOKEN"
-```
-
 If successful you will get an output similar to the below:
 
 |Property | Value|
@@ -115,7 +118,7 @@ If successful you will get an output similar to the below:
 | DefaultCustomerID | 50 |
 | Error |  |
 
-The session is now stored in the global **$\_NCSession** variable, and will automatically be used for other PS-NCentral commands.
+The session is now stored in the global **$\_NCSession** variable, and will automatically be used as default for following PS-NCentral commands.
 
 ### Multiple PS-NCentral server connections
 
@@ -260,6 +263,8 @@ Most methods have 'Overloads'. These are selected based on the parameter-pattern
 ```powershell
 #Get the devices for customerid 100
 $Customer100Devices = $NCSession.DeviceList(100)
+#or
+$Customer100Devices = $NCSession.DeviceList(100,$true,$false)
 
 #Get the probes for customerid 100
 $Customer100Probes = $NCSession.DeviceList(100,$false,$true)
@@ -875,7 +880,7 @@ This function will return the value for the new Customer ID, you can then use th
 | Set-NCCustomerProperty | Fills the specified property(name) for the given CustomerID(s). |
 | Set-NCDeviceProperty | Fills the Custom Property for the DeviceID(s). |
 | Set-NCTimeOut | Sets the max. time in seconds to wait for data returning from a (Synchronous) NCentral API-request. |
-
+<br>
 # Appendix C – GetAllCustomerProperties.ps1
 
 ```powershell
@@ -996,6 +1001,12 @@ $CustomersReport | Out-GridView
 |ToString|
 |UserRoleGet|
 |UserRoleList|
+
+# Appendix F - Common Error Codes
+#1012 - Thrown when mandatory settings are not present in "settings".
+#2100 - Thrown when invalid MSP N-central credentials are input.
+#5000 - An unexpected exception occurred.
+#3020 - Account is locked
 
 # Credits
 Special Thanks go to the following Partners and Community Members for their contributions to the **NC-API-Documentation**
