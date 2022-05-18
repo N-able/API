@@ -1,7 +1,9 @@
 # How To: N-Central API Automation
 
-## Table of Contents
+## Table of Content
+
 - [How To: N-Central API Automation](#how-to--n-central-api-automation)
+  * [Table of Content](#table-of-content)
 - [Overview](#overview)
 - [Connecting](#connecting)
   * [PS-NCentral](#ps-ncentral)
@@ -16,17 +18,23 @@
   * [PS-NCentral](#ps-ncentral-2)
     + [Updating with pipelining](#updating-with-pipelining)
     + [Updating Custom Device Properties](#updating-custom-device-properties)
+    + [Custom Property options](#custom-property-options)
+      - [Encoding](#encoding)
+      - [Comma-Separated Values](#comma-separated-values)
+      - [Format-properties](#format-properties)
   * [PowerShell WebserviceProxy](#powershell-webserviceproxy-2)
     + [Registration token injection](#registration-token-injection)
     + [Gather organization property ID](#gather-organization-property-id)
     + [Update customer property](#update-customer-property)
     + [Add new a new Customer](#add-new-a-new-customer)
 - [Appendix A – N-Central Web Service members](#appendix-a---n-central-web-service-members)
-- [Appendix - B PS-NCentral cmdlets](#appendix---b-ps-ncentral-cmdlets)
+- [Appendix B - PS-NCentral cmdlets](#appendix-b---ps-ncentral-cmdlets)
 - [Appendix C – GetAllCustomerProperties.ps1](#appendix-c---getallcustomerpropertiesps1)
 - [Appendix D – Customer Property variables](#appendix-d---customer-property-variables)
 - [Appendix E - All PS-Central Methods](#appendix-e---all-ps-central-methods)
 - [Appendix F - Common Error Codes](#appendix-f---common-error-codes)
+- [Appendix G - Issue Status](#appendix-g---issue-status)
+- [Appendix H - WebserviceProxy Alternative](#appendix-h---webserviceproxy-alternative)
 - [Credits](#credits)
 
 <small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents generated with markdown-toc</a></i></small>
@@ -146,6 +154,9 @@ You can use **Set-NCCustomerDefault** to change the value afterwards.
 
 ## PowerShell WebserviceProxy
 
+Notice the WebserviceProxy is discontinued after PowerShell version 5.1. You can find alternative code in [Appendix H - WebserviceProxy Alternative](#appendix-h---webserviceproxy-alternative)
+
+
 As a preface to the usage of the New-WebserviceProxy cmdlet, we will focus on the v2 rather than v1 legacy API as the v1 endpoint maybe deprecated at some point.
 
 The main differences between the v1 and v2 endpoints are:
@@ -243,7 +254,7 @@ $CustomerReport | Out-GridView
 The important parts of this example are the simple one line calls for the **New-CentralConnection** , **Get-NCCustomerList** and **Get-NCCustomerPropertyList**. With very little effort we can connect, retrieve the data then process into a single table for review.
 
 ### Advanced PS-NCentral querying
-The PS-NCentral module provides ease of access to N-Central API calls with normal **verb-noun** functions, but you can also perform a direct call through the internal connection class, we could replace the above function calls with these methods:
+The PS-NCentral module provides ease of access to N-Central API calls with normal **verb-noun** functions, but you can also perform a direct call through the internal connection class. We could replace the above function calls with these methods:
 
 ```powershell
 # Connect to NC
@@ -367,6 +378,11 @@ $CustomersReport | Out-GridView
 
 For the complete script see [Appendix C – GetAllCustomerProperties.ps1](#appendix-c---getallcustomerpropertiesps1)
 
+
+
+Note that **WebServiceProxy** is **discontinued** by Microsoft in PowerShell versions after 5.1. You can find alternative code in [Appendix H - WebserviceProxy Alternative](#appendix-h---webserviceproxy-alternative)
+
+
 # Updating a Value
 
 A common case for updating a value would be automating the update/change of Organisation or Device properties. Examples of Organisation properties could be: tokens/keys for MSP applications deployed to devices, the customer name to pass through to a script for output or the N-Central API registration token for installation of the agent. Updating these properties is straightforward with either the web proxy or PS-NCentral cmdlets.
@@ -478,6 +494,41 @@ Select-Object DeviceID, `
 @{n="ExternalID"; e={$CustomerID = $_.customerid; (@($Customers).where({ $_.customerID -eq $CustomerID })).ExternalID}} | `
 Where-Object {$_.ExternalID} | %{Set-NCDeviceProperty -DeviceIDs $_.DeviceID -PropertyLabel 'ExternalID' -PropertyValue ($_.ExternalID -join ',')}
 ```
+
+
+
+### Custom Property options
+
+These options are introduced in PS-NCentral version **1.3**.
+
+#### Encoding
+
+Use the **-Base64** option to Encode/Decode a CustomProperty when using Set or Get. Unicode (utf16) by default, -utf8 option available.
+
+**Convert-Base64** is available as a seperate command too.
+
+
+
+#### Comma-Separated Values
+
+When a Custom Property holds a string of (unique) Comma-seperated values you can easily Add or Remove a single value with the commands:
+
+- Add-NCCustomerPropertyValue
+- Add-NCDevicePropertyValue
+- Remove-NCCustomerPropertyValue
+- Remove-NCDevicePropertyValue   
+
+Use Get-help \<command\> to see the options.
+
+
+
+#### Format-properties
+
+Sometimes not all objects in a list have the same properties. This can become an issue when using **Format-Table** or **Output-CSV**, which only use the properties of the first object in the list.
+
+The **Format-Properties** cmdlet ensures all unique properties are added to all objects in a list. It is integrated in several PS-NCentral list-commands but also available as a seperate command.
+
+
 
 ## PowerShell WebserviceProxy
 
@@ -853,7 +904,7 @@ This function will return the value for the new Customer ID, you can then use th
 |UseDefaultCredentials | Property |
 |UserAgent | Property |
 
-# Appendix - B PS-NCentral cmdlets
+# Appendix B - PS-NCentral cmdlets
 
 | Command | Synopsis |
 | --- | --- |
@@ -881,6 +932,7 @@ This function will return the value for the new Customer ID, you can then use th
 | Set-NCDeviceProperty | Fills the Custom Property for the DeviceID(s). |
 | Set-NCTimeOut | Sets the max. time in seconds to wait for data returning from a (Synchronous) NCentral API-request. |
 <br>
+
 # Appendix C – GetAllCustomerProperties.ps1
 
 ```powershell
@@ -951,21 +1003,29 @@ $CustomersReport | Out-GridView
 
 # Appendix D – Customer Property variables
 
-- **zip/postalcode** - (Value) Customer's zip/ postal code.
+These are the default properties returned in the customerlist. After connecting using PS-NCentral this list can also be found in the customervalidation property. 
+
+```powershell
+$_ncsession.customervalidation
+```
+
+- **postalcode** - (Value) Customer's zip/ postal code.
 - **street1** - (Value) Address line 1 for the customer. Maximum of 100 characters.
 - **street2** - (Value) Address line 2 for the customer. Maximum of 100 characters.
 - **city** - (Value) Customer's city.
-- **state/province** - (Value) Customer's state/ province.
-- **telephone** - (Value) Phone number of the customer.
+- **stateprov** - (Value) Customer's state/ province.
+- **phone** - (Value) Phone number of the customer.
 - **country** - (Value) Customer's country. Two character country code, see http://en.wikipedia.org/wiki/ISO\_3166-1\_alpha-2 for a list of country codes.
 - **externalid** - (Value) An external reference id.
-- **firstname** - (Value) Customer contact's first name.
-- **lastname** - (Value) Customer contact's last name.
-- **title** - (Value) Customer contact's title.
-- **department** - (Value) Customer contact's department.
-- **contact\_telephone** - (Value) Customer contact's telephone number.
-- **ext** - (Value) Customer contact's telephone extension.
-- **email** - (Value) Customer contact's email. Maximum of 100 characters.
+- **externalid2** - (Value) A second external reference id.
+- **contactfirstname** - (Value) Customer contact's first name.
+- **contactlastname** - (Value) Customer contact's last name.
+- **contacttitle** - (Value) Customer contact's title.
+- **contactdepartment** - (Value) Customer contact's department.
+- **contactphonenumber** - (Value) Customer contact's telephone number.
+- **contactext** - (Value) Customer contact's telephone extension.
+- **contactemail** - (Value) Customer contact's email. Maximum of 100 characters.
+- **registrationtoken** - (ReadOnly) For agent/probe-install validation.
 - **licensetype** - (Value) The default license type of new devices for the customer. Must be Professional or Essential. Default is Essential.
 
 # Appendix E - All PS-Central Methods
@@ -1003,13 +1063,164 @@ $CustomersReport | Out-GridView
 |UserRoleList|
 
 # Appendix F - Common Error Codes
-#1012 - Thrown when mandatory settings are not present in "settings".
-#2100 - Thrown when invalid MSP N-central credentials are input.
-#5000 - An unexpected exception occurred.
-#3020 - Account is locked
+
+\#    Connection-error (https): There was an error downloading ..
+
+\#    1012 - Thrown when mandatory settings are not present in "settings".
+
+\#    2001 - Required parameter is null - Thrown when null values are entered as inputs.
+
+\#    2001 - Unsupported version - Thrown when a version not specified above is entered as input.
+
+\#    2001 - Thrown when a bad username-password combination is input, or no PSA integration has been set up.
+
+\#    2100 - Thrown when invalid MSP N-central credentials are input.
+
+\#    2100 - Thrown when MSP-N-central credentials with MFA are used.
+
+\#    3010 - Maximum number of users reached.
+
+\#    3012 - Specified email address is already assigned to another user.
+
+\#    3014 - Creation of a user for the root customer (CustomerID 1) is not permitted.
+
+\#    3014 - When adding a user, must not be an LDAP user.
+
+\#    3020 - Account is locked
+
+\#    3022 - Customer/Site already exists.
+
+\#    3026 - Customer name length has exceeded 120 characters.
+
+\#    4000 - SessionID not found or has expired.
+
+\#    5000 - An unexpected exception occurred.
+
+\#    5000 - Query failed.
+
+\#    5000 - javax.validation.ValidationException: Unable to validate UI session	--> often an expired password, even when using JWT.
+
+\#    9910 - Service Organization already exists.
+
+
+
+# Appendix G - Issue Status
+
+These codes can be used with the **-IssueStatus** option of the **Get-NCActiveIssuesList** command. In v1.3 code 1 and 5 naming was incorrect (swapped)
+
+```
+1	No Data
+2	Stale
+3	Normal        --> Nothing returned
+4	Warning
+5	Failed
+6	Misconfigured
+7	Disconnected
+
+11	Unacknowledged
+12	Acknowledged
+```
+
+The API does not allow combinations of these filters.
+
+- **1-7** are reflected in the **notifstate**-property.
+- **11** and **12** relate to the properties **numberofactivenotification** and **numberofacknowledgednotification**.
+
+
+
+# Appendix H - WebserviceProxy Alternative
+
+The command **WebServiceProxy** is **discontinued** by Microsoft in PowerShell versions after 5.1. Below you can find an example of retrieving data with **Invoke-RestMethod**  and compare it to the use of WebserviceProxy. 
+
+```PowerShell
+## Retrieving data from N-Central by SOAP-API
+
+# Settings
+$Servername = "ServerFQDN"
+$UserName = "API-User-noMFA"    ## Or "" when using JWT
+$Password = "P@ssword"          ## Or JWT (preferred)
+
+# Function for retrieving data without Webserviceproxy.
+# Works for most (but not all!!) Methods in 
+#      https://mothership.n-able.com/dms/javadoc_ei2/com/nable/nobj/ei2/ServerEI2_PortType.html
+# Note: Complex passwords may contain characters that invalidate the SOAP-request.
+Function GetNCData([String]$APIMethod,[String]$Username,[String]$PassOrJWT,$KeyPairs){
+
+    ## Process Keys
+    $MyKeys=""
+    ForEach($KeyPair in $KeyPairs){ 
+        $MyKeys = $MyKeys + ("
+        <ei2:settings>
+            <ei2:key>{0}</ei2:key>
+            <ei2:value>{1}</ei2:value>
+        </ei2:settings>" -f ($KeyPair.Key),($KeyPair.Value))
+    }
+    
+    ## Build SoapRequest (last line must be left-lined for terminating @")
+    $MySoapRequest =(@"
+    <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:ei2="http://ei2.nobj.nable.com/">
+    <soap:Header/>
+    <soap:Body>
+        <ei2:{0}>
+            <ei2:username>{1}</ei2:username>
+            <ei2:password>{2}</ei2:password>{3}
+        </ei2:{0}>
+    </soap:Body>
+    </soap:Envelope>
+"@ -f $APIMethod, $Username, $PassOrJWT, $MyKeys)
+    #Write-Host $MySoapRequest       ## For Debug/Educational purpose
+    
+    ## Request DataSet
+    $FullResponse = $null
+    Try{
+            $FullResponse = Invoke-RestMethod -Uri $BindingURL -body $MySoapRequest -Method POST
+        }
+    Catch{
+            Write-Host ("Could not connect: {0}." -f $_.Exception.Message )
+            exit
+        }
+        
+    ## Process Returned DataSet
+    $ReturnClass = $FullResponse.envelope.body | Get-Member -MemberType Property
+    $ReturnProperty = $ReturnClass[0].Name
+            
+    Return  $FullResponse.envelope.body.$ReturnProperty.return
+}
+# End of Function GetNCData
+
+#Start of Main Script
+# Extract local configuration Info.
+$ApplianceConfig = ("{0}\N-able Technologies\Windows Agent\config\ApplianceConfig.xml" -f ${Env:ProgramFiles(x86)})
+# Get appliance id
+$ApplianceXML = [xml](Get-Content -Path $ApplianceConfig)
+$ApplianceID = $ApplianceXML.ApplianceConfig.ApplianceID
+
+# Prepare Connection
+$BindingURL = ("https://{0}/dms2/services2/ServerEI2?wsdl" -f $ServerName)
+
+## Add one or more keypairs to the array, depending on method parameter needs.
+$KeyPairs = @()
+$KeyPair = [PSObject]@{Key='applianceID'; Value=$ApplianceID;}
+$KeyPairs += $KeyPair
+
+## Pre Powershell 7 : Method using WebserviceProxy
+#$Connection = New-Webserviceproxy $BindingURL
+
+# Get data from N-Central. Old and New line for comparison and easy conversion of existing scripts.
+#$rc = $Connection.deviceGet($UserName, $Password, $KeyPairs)
+$rc = GetNCData 'deviceGet' $UserName $Password $KeyPairs
+
+# Extract the Customer-ID and display.
+$CustomerID = ($rc.info | where-object {$_.key -eq "device.customerid"}).value
+$CustomerID
+```
+
+
+
+
 
 # Credits
 Special Thanks go to the following Partners and Community Members for their contributions to the **NC-API-Documentation**
 *   David Brooks of Premier Technology Solutions
-*   Adriaan Sluis of Tosch for PS-NCentral 1.2 and notes
+*   Adriaan Sluis of Tosch for PS-NCentral and notes
 *   Joshua Bennet of Impact Networking for notes on EiKeyValue usage
